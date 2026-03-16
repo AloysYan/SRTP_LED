@@ -6,10 +6,18 @@
  */
 
 #include "tim.h"
+#include "main.h"
 #include "ky040.h"
 
 int count = 0;
 int light_on = 0;
+static int last_encoder_raw = 0;
+static int brightness_units = 0;
+
+// 可调参数：旋钮转满一圈对应的编码器步数（KY040常见约20步/圈）
+#define KY040_STEPS_PER_REV          20
+// 可调参数：亮度上限百分比（当前为原最大亮度的20%）
+#define KY040_BRIGHTNESS_LIMIT_PCT   20
 
 // 初始化编码器
 void KY040_Init() {
@@ -18,21 +26,43 @@ void KY040_Init() {
 	// 初始化计数值和LED状态
 	count = 0;
 	light_on = 0;
+	__HAL_TIM_SET_COUNTER(&htim1, 0);
+	last_encoder_raw = 0;
+	brightness_units = 0;
 }
 
 // 更新编码器状态并调整LED亮度
 void KY040_Update() {
-	// 读取编码器计数值，并进行处理
-	count = __HAL_TIM_GET_COUNTER(&htim1);
+	int encoder_raw = (int)__HAL_TIM_GET_COUNTER(&htim1);
+	int encoder_range = (int)__HAL_TIM_GET_AUTORELOAD(&htim1) + 1;
+	int delta = encoder_raw - last_encoder_raw;
+	int pwm_max = ((int)__HAL_TIM_GET_AUTORELOAD(&htim2) * KY040_BRIGHTNESS_LIMIT_PCT) / 100;
+	int brightness_units_max = pwm_max * KY040_STEPS_PER_REV;
 
-	// 根据计数值调整LED亮度并防止溢出
-	if (count > 6000) {
-	    count = 0;
-	    __HAL_TIM_SET_COUNTER(&htim1, 0);
-	} else if (count > 100) {
-	    count = 100;
-	    __HAL_TIM_SET_COUNTER(&htim1, 100);
+	// 处理计数器回绕，保证每次只得到小步进增量
+	if (delta > (encoder_range / 2)) {
+		delta -= encoder_range;
+	} else if (delta < -(encoder_range / 2)) {
+		delta += encoder_range;
 	}
+
+	// 将旋钮位移映射到亮度：转满一圈到达最大亮度
+	brightness_units += delta * pwm_max;
+
+	// 饱和限幅，避免亮度在边界发生回绕
+	if (brightness_units < 0) {
+		brightness_units = 0;
+	} else if (brightness_units > brightness_units_max) {
+		brightness_units = brightness_units_max;
+	}
+
+	// 把中间量还原为PWM比较值（四舍五入）
+	count = (brightness_units + (KY040_STEPS_PER_REV / 2)) / KY040_STEPS_PER_REV;
+	if (count > pwm_max) {
+		count = pwm_max;
+	}
+
+	last_encoder_raw = encoder_raw;
 }
 
 // 按键处理函数

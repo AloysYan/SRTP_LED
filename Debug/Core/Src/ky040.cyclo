@@ -1,3 +1,3 @@
-../Core/Src/ky040.c:16:6:KY040_Init	1
-../Core/Src/ky040.c:25:6:KY040_Update	3
-../Core/Src/ky040.c:40:6:KY040_Key	4
+../Core/Src/ky040.c:23:6:KY040_Init	1
+../Core/Src/ky040.c:35:6:KY040_Update	6
+../Core/Src/ky040.c:69:6:KY040_Key	4
